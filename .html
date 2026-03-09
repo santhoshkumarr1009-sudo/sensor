@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>ESP32 Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Syne:wght@400;700;800&display=swap" rel="stylesheet"/>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #05080f;
+  --surface: #0b1120;
+  --border: #162035;
+  --accent: #38bdf8;
+  --green: #4ade80;
+  --red: #f87171;
+  --orange: #fb923c;
+  --muted: #2d3f5f;
+  --text: #94afd4;
+  --mono: 'JetBrains Mono', monospace;
+  --sans: 'Syne', sans-serif;
+}
+
+body {
+  background: var(--bg);
+  font-family: var(--sans);
+  color: var(--text);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+body::after {
+  content: '';
+  position: fixed; inset: 0;
+  background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.06) 2px, rgba(0,0,0,0.06) 4px);
+  pointer-events: none;
+  z-index: 100;
+}
+
+.topbar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 28px; border-bottom: 1px solid var(--border);
+  flex-wrap: wrap; gap: 12px; background: var(--surface);
+}
+.brand { display: flex; align-items: center; gap: 10px; }
+.brand-chip {
+  background: var(--accent); color: #05080f;
+  font-family: var(--mono); font-size: 0.62rem; font-weight: 700;
+  letter-spacing: 2px; padding: 4px 8px; border-radius: 4px;
+}
+.brand h1 { font-size: 1.05rem; font-weight: 800; color: #e2eaf8; }
+
+.conn-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ip-field {
+  background: var(--bg); border: 1px solid var(--border);
+  border-radius: 6px; padding: 6px 10px; color: var(--accent);
+  font-family: var(--mono); font-size: 0.78rem; width: 140px; outline: none;
+  transition: border-color .2s;
+}
+.ip-field:focus { border-color: var(--accent); }
+.ip-prefix { font-family: var(--mono); font-size: 0.72rem; color: var(--muted); }
+.connect-btn {
+  padding: 7px 16px; border-radius: 6px; border: 1px solid var(--accent);
+  background: transparent; color: var(--accent); font-family: var(--sans);
+  font-size: 0.75rem; font-weight: 700; cursor: pointer; letter-spacing: 1px;
+  transition: all .2s;
+}
+.connect-btn:hover { background: rgba(56,189,248,0.1); }
+.connect-btn.off  { border-color: var(--red); color: var(--red); }
+
+.pill { display: flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: 0.68rem; letter-spacing: 1px; color: var(--muted); }
+.pip { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
+.pip.on  { background: var(--green); box-shadow: 0 0 7px var(--green); animation: blink 1.8s infinite; }
+.pip.err { background: var(--red); }
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
+
+main {
+  flex: 1; padding: 24px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  max-width: 880px; margin: 0 auto; width: 100%;
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px; padding: 22px;
+  position: relative; overflow: hidden;
+  transition: border-color .35s, box-shadow .35s;
+}
+.card::before {
+  content: '';
+  position: absolute; top: 0; left: 20px; right: 20px; height: 1px;
+  background: linear-gradient(90deg, transparent, var(--c, var(--accent)), transparent);
+  opacity: 0.5;
+}
+.card.ALERT {
+  border-color: var(--c, var(--accent));
+  box-shadow: 0 0 28px rgba(var(--cr,56,189,248), 0.13);
+}
+
+.card-label { font-family: var(--mono); font-size: 0.6rem; letter-spacing: 2px; color: var(--muted); text-transform: uppercase; margin-bottom: 4px; }
+.card-name  { font-size: 1rem; font-weight: 700; color: #dde8fa; margin-bottom: 18px; }
+
+.bignum {
+  font-family: var(--mono); font-size: 3rem; font-weight: 700;
+  line-height: 1; color: var(--c, var(--accent)); transition: color .3s;
+}
+.unit { font-family: var(--mono); font-size: 0.68rem; color: var(--muted); margin-top: 4px; margin-bottom: 14px; }
+
+.bar-track { height: 5px; background: var(--border); border-radius: 3px; overflow: hidden; }
+.bar-fill  {
+  height: 100%; border-radius: 3px;
+  background: var(--c, var(--accent));
+  box-shadow: 0 0 8px var(--c, var(--accent));
+  transition: width .55s ease;
+}
+.bar-ends { display: flex; justify-content: space-between; font-family: var(--mono); font-size: 0.6rem; color: var(--muted); margin-top: 4px; }
+
+.badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 5px 11px; border-radius: 20px;
+  font-family: var(--mono); font-size: 0.68rem; letter-spacing: .5px;
+  border: 1px solid var(--border); color: var(--muted);
+  transition: all .3s;
+}
+.badge.ALERT {
+  border-color: var(--c, var(--accent));
+  color: var(--c, var(--accent));
+  background: rgba(var(--cr,56,189,248), 0.08);
+}
+
+.state-big {
+  font-family: var(--mono); font-size: 2.8rem; font-weight: 700;
+  color: var(--c, var(--accent)); letter-spacing: 2px;
+  line-height: 1; margin-bottom: 4px; transition: color .3s;
+}
+
+.arc-section { display: flex; align-items: center; gap: 18px; }
+.arc-svg { overflow: visible; flex-shrink: 0; }
+.arc-bg   { fill: none; stroke: var(--border); stroke-width: 7; stroke-linecap: round; }
+.arc-line {
+  fill: none; stroke: var(--c, var(--accent));
+  stroke-width: 7; stroke-linecap: round;
+  filter: drop-shadow(0 0 5px var(--c, var(--accent)));
+  transition: stroke-dashoffset .6s ease;
+}
+.arc-info { flex: 1; }
+
+/* OLED replica */
+.oled-card {
+  grid-column: 1 / -1;
+  background: #000; border: 2px solid #1a1a1a;
+  border-radius: 10px; padding: 14px 22px;
+  font-family: var(--mono); font-size: 0.82rem; color: #fff;
+  line-height: 2; position: relative;
+  display: flex; flex-wrap: wrap; gap: 28px;
+}
+.oled-card::before {
+  content: 'OLED LIVE PREVIEW';
+  position: absolute; top: -9px; left: 14px;
+  font-size: 0.55rem; letter-spacing: 2px; background: #000; padding: 0 6px; color: #333;
+}
+.oled-line span:first-child { color: #888; }
+
+/* log */
+.log-card {
+  grid-column: 1 / -1;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 14px; padding: 18px 22px;
+}
+.log-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+.log-title { font-family: var(--mono); font-size: 0.6rem; letter-spacing: 2px; color: var(--muted); text-transform: uppercase; }
+.log-clr   { font-family: var(--mono); font-size: 0.62rem; color: var(--muted); background: none; border: none; cursor: pointer; }
+.log-clr:hover { color: var(--accent); }
+.log-body  {
+  font-family: var(--mono); font-size: 0.71rem;
+  height: 100px; overflow-y: auto;
+  display: flex; flex-direction: column-reverse; gap: 2px;
+}
+.log-body::-webkit-scrollbar { width: 3px; }
+.log-body::-webkit-scrollbar-thumb { background: var(--border); }
+.log-row { display: flex; gap: 12px; }
+.log-t   { color: var(--muted); flex-shrink: 0; }
+.log-m   { color: var(--text); }
+.log-m.warn { color: var(--red); }
+
+@media(max-width:600px) {
+  main { grid-template-columns: 1fr; }
+  .oled-card, .log-card { grid-column: 1; }
+  .bignum { font-size: 2.2rem; }
+}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="brand">
+    <div class="brand-chip">ESP32</div>
+    <h1>Sensor Dashboard</h1>
+  </div>
+  <div class="conn-row">
+    <div class="pill"><div class="pip" id="pip"></div><span id="pillTxt">OFFLINE</span></div>
+    <span class="ip-prefix">ws://</span>
+    <input class="ip-field" id="ipIn" placeholder="192.168.x.x" value="192.168.1.100"/>
+    <span class="ip-prefix">:81</span>
+    <button class="connect-btn" id="connBtn" onclick="toggle()">Connect</button>
+  </div>
+</div>
+
+<main>
+
+  <!-- GAS -->
+  <div class="card" id="gasCard" style="--c:var(--orange);--cr:251,146,60">
+    <div class="card-label">MQ-2 · GPIO 34</div>
+    <div class="card-name">Gas / Smoke</div>
+    <div class="bignum" id="gasNum">—</div>
+    <div class="unit">raw ADC (0 – 4095) · alert above 2000</div>
+    <div class="bar-track" style="margin-bottom:8px"><div class="bar-fill" id="gasBar" style="width:0%"></div></div>
+    <div class="bar-ends"><span>0</span><span>2000 ⚠</span><span>4095</span></div>
+    <div class="badge" id="gasBadge" style="margin-top:12px">● NORMAL</div>
+  </div>
+
+  <!-- DISTANCE -->
+  <div class="card" id="distCard" style="--c:var(--accent);--cr:56,189,248">
+    <div class="card-label">HC-SR04 · TRIG 5 / ECHO 18</div>
+    <div class="card-name">Distance</div>
+    <div class="arc-section">
+      <svg class="arc-svg" width="96" height="56" viewBox="0 0 96 56">
+        <path class="arc-bg"   d="M6,52 A44,44 0 0,1 90,52"/>
+        <path class="arc-line" id="arcLine" d="M6,52 A44,44 0 0,1 90,52"
+              stroke-dasharray="138" stroke-dashoffset="138"/>
+      </svg>
+      <div class="arc-info">
+        <div class="bignum" id="distNum">—</div>
+        <div class="unit">centimetres · LED off below 20</div>
+        <div class="badge" id="distBadge">● MEASURING</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MOTION -->
+  <div class="card" id="motCard" style="--c:var(--green);--cr:74,222,128">
+    <div class="card-label">PIR · GPIO 27</div>
+    <div class="card-name">Motion</div>
+    <div class="state-big" id="motState">—</div>
+    <div class="unit">digital output · 1 = motion · LED GPIO 12</div>
+    <div class="badge" id="motBadge" style="margin-top:10px">● IDLE</div>
+  </div>
+
+  <!-- IR -->
+  <div class="card" id="irCard" style="--c:#a78bfa;--cr:167,139,250">
+    <div class="card-label">IR Sensor · GPIO 26</div>
+    <div class="card-name">IR Obstacle</div>
+    <div class="state-big" id="irState">—</div>
+    <div class="unit">digital output · 0 = obstacle detected</div>
+    <div class="badge" id="irBadge" style="margin-top:10px">● CLEAR</div>
+  </div>
+
+  <!-- OLED replica -->
+  <div class="oled-card">
+    <div>
+      <div class="oled-line"><span>Gas: </span><span id="oGas">—</span></div>
+      <div class="oled-line"><span>Distance: </span><span id="oDist">—</span></div>
+    </div>
+    <div>
+      <div class="oled-line"><span>Motion: </span><span id="oMot">—</span></div>
+      <div class="oled-line"><span>IR: </span><span id="oIr">—</span></div>
+    </div>
+  </div>
+
+  <!-- LOG -->
+  <div class="log-card">
+    <div class="log-head">
+      <div class="log-title">Event Log</div>
+      <button class="log-clr" onclick="clearLog()">[ clear ]</button>
+    </div>
+    <div class="log-body" id="logBody">
+      <div class="log-row"><span class="log-t">--:--:--</span><span class="log-m">Enter ESP32 IP above and click Connect.</span></div>
+    </div>
+  </div>
+
+</main>
+
+<script>
+let ws = null, live = false;
+let prevMot = -1, prevIr = -1, prevGasAlert = false;
+
+function toggle() { live ? disconnect() : connect(); }
+
+function connect() {
+  const ip = document.getElementById('ipIn').value.trim();
+  log(`Connecting to ws://${ip}:81 …`);
+  ws = new WebSocket(`ws://${ip}:81`);
+  ws.onopen    = () => { live = true;  setStatus(true);  log('✅ Connected to ESP32'); };
+  ws.onmessage = e => { try { render(JSON.parse(e.data)); } catch { log('⚠ Bad data', true); } };
+  ws.onerror   = ()  => log('❌ Error — check IP & WiFi', true);
+  ws.onclose   = () => { live = false; setStatus(false); log('🔌 Disconnected'); };
+}
+function disconnect() { ws && ws.close(); }
+
+function setStatus(on) {
+  document.getElementById('pip').className = 'pip ' + (on ? 'on' : 'err');
+  document.getElementById('pillTxt').textContent = on ? 'LIVE' : 'OFFLINE';
+  const btn = document.getElementById('connBtn');
+  btn.textContent = on ? 'Disconnect' : 'Connect';
+  btn.className   = 'connect-btn' + (on ? ' off' : '');
+}
+
+function render({ gas, distance, motion, ir }) {
+  // GAS
+  const gasAlert = gas > 2000;
+  document.getElementById('gasNum').textContent = gas;
+  document.getElementById('gasBar').style.width = Math.min(gas / 4095 * 100, 100) + '%';
+  setCard('gasCard', gasAlert);
+  setBadge('gasBadge', gasAlert, gasAlert ? '⚠ GAS ALERT!' : '● NORMAL');
+  if (gasAlert && !prevGasAlert) log(`⚠ Gas threshold exceeded! Value: ${gas}`, true);
+  prevGasAlert = gasAlert;
+
+  // DISTANCE
+  document.getElementById('distNum').textContent = distance;
+  const arcOff = 138 - Math.min(distance / 400, 1) * 138;
+  document.getElementById('arcLine').style.strokeDashoffset = arcOff;
+  const tooClose = distance < 20;
+  setCard('distCard', tooClose);
+  setBadge('distBadge', tooClose, tooClose ? '⚠ TOO CLOSE (<20cm)' : '● OK');
+
+  // MOTION
+  const mot = motion === 1;
+  document.getElementById('motState').textContent = motion;
+  setCard('motCard', mot);
+  setBadge('motBadge', mot, mot ? '● MOTION DETECTED' : '● IDLE');
+  if (mot && prevMot !== 1) log('🏃 Motion detected!');
+  prevMot = motion;
+
+  // IR
+  const irDet = ir === 0;
+  document.getElementById('irState').textContent = ir;
+  setCard('irCard', irDet);
+  setBadge('irBadge', irDet, irDet ? '● OBSTACLE DETECTED' : '● CLEAR');
+  if (irDet && prevIr !== 0) log('🔴 IR obstacle detected!');
+  prevIr = ir;
+
+  // OLED mirror
+  document.getElementById('oGas').textContent  = gas;
+  document.getElementById('oDist').textContent = distance;
+  document.getElementById('oMot').textContent  = motion;
+  document.getElementById('oIr').textContent   = ir;
+}
+
+function setCard(id, alert)  { document.getElementById(id).classList.toggle('ALERT', alert); }
+function setBadge(id, alert, txt) {
+  const el = document.getElementById(id);
+  el.textContent = txt;
+  el.classList.toggle('ALERT', alert);
+}
+
+function log(msg, warn = false) {
+  const t = new Date().toTimeString().slice(0, 8);
+  const body = document.getElementById('logBody');
+  const row = document.createElement('div');
+  row.className = 'log-row';
+  row.innerHTML = `<span class="log-t">${t}</span><span class="log-m${warn?' warn':''}">${msg}</span>`;
+  body.prepend(row);
+  while (body.children.length > 80) body.removeChild(body.lastChild);
+}
+function clearLog() { document.getElementById('logBody').innerHTML = ''; }
+</script>
+</body>
+</html>
